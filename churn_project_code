@@ -1,0 +1,200 @@
+"""IMPORTANDO BIBLIOTECAS"""
+
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from keras.models import Sequential
+from sklearn.compose import ColumnTransformer
+from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.model_selection import train_test_split, learning_curve
+from sklearn.metrics import confusion_matrix, recall_score, ConfusionMatrixDisplay
+
+"""IMPORTANDO BASE DE DADOS"""
+
+data = pd.read_excel('e_commerce_dataset.xlsx')
+data
+
+"""ELIMINANDO VALORES NULOS"""
+
+data = data.dropna()
+data
+
+"""ELIMINANDO A COLUNA "CustomerID", VISTO QUE ELA NÃO POSSUI IMPACTO NA PREDIÇÃO"""
+
+data = data.drop("CustomerID", axis = 1)
+data
+
+"""DIVIDINDO AS VARIÁVEIS DE ENTRADA E SAÍDA"""
+
+y = data.iloc[:,0]
+x = data.iloc[:,1:]
+x
+
+"""TRANSFORMANDO DADOS CATEGÓRICOS EM NUMÉRICOS"""
+
+ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [1, 4, 5, 8, 10])],
+                       remainder='passthrough')
+
+x = ct.fit_transform(x)
+x
+pd.DataFrame(x)
+
+colunas = ["PreferredLoginDevice1", "PreferredLoginDevice2", "PreferredLoginDevice3", "PreferredPaymentMode1",	"PreferredPaymentMode2",
+           "PreferredPaymentMode3", "PreferredPaymentMode4", "PreferredPaymentMode5", "PreferredPaymentMode6", "PreferredPaymentMode7",
+           "Gender1", "Gender2",	"PreferedOrderCat1", "PreferedOrderCat2",	"PreferedOrderCat3", 	"PreferedOrderCat4", 	"PreferedOrderCat5",
+           "PreferedOrderCat6", "MaritalStatus1",	"MaritalStatus2", "MaritalStatus3", "Tenure", "CityTier",	"WarehouseToHome",
+           "HourSpendOnApp",	"NumberOfDeviceRegistered",	"SatisfactionScore", "NumberOfAddress",
+           "Complain",	"OrderAmountHikeFromlastYear",	"CouponUsed",	"OrderCount",	"DaySinceLastOrder",	"CashbackAmount"]
+x = pd.DataFrame(x, columns=colunas)
+x
+
+"""SELECIONANDO FEATURES"""
+
+from sklearn.ensemble import RandomForestClassifier
+
+model = RandomForestClassifier(n_estimators=50)
+model.fit(x,y)
+
+feature_importance = pd.DataFrame (model.feature_importances_, index = x.columns, columns = ['importance']).sort_values('importance',
+                                                                                                                        ascending=False)
+feature_importance
+
+"""FEATURES COM GRAUS DE IMPORTÂNCIAS SUPERIORES À 0,05 (5%)"""
+
+best_feature_importance = feature_importance[feature_importance ['importance'] >=0.05]
+best_feature_importance
+
+"""NOVO DATAFRAME DE X COM AS MELHORES FEATURES"""
+
+x_best = x[['Tenure', 'CashbackAmount', 'WarehouseToHome', 'NumberOfAddress', 'OrderAmountHikeFromlastYear',
+            'DaySinceLastOrder','Complain']]
+x_best
+
+"""DIVIDINDO DADOS DE TREINO E TESTE"""
+
+x_train, x_test, y_train, y_test = train_test_split(x,y,test_size = 0.3, stratify = y)
+
+x_train
+
+y_train
+
+"""NORMALIZANDO DADOS"""
+
+sc = StandardScaler()
+x_train = sc.fit_transform(x_train)
+x_test = sc.transform(x_test)
+
+x_train
+
+x_test
+
+"""SELEÇÃO DO NÚMERO DE NEURÔNIOS DA CAMADA DE PROCESSAMENTO"""
+
+def Return_Recall(x_test, y_test):
+    y_pred = ann.predict(x_test)
+    y_pred = (y_pred > 0.5)
+
+    score = recall_score(y_test, y_pred)*100
+    list_ReturnRecall.append (score)
+
+    return print("Recall com a validação (%): ", ((score)))
+
+list_ReturnRecall = []
+list_neurons = [2,4,6,8]
+
+for i in list_neurons:
+    ann = Sequential()
+
+    ann.add (tf.keras.layers.Dense (units=i, activation='relu', kernel_initializer = 'he_normal'))
+    ann.add (tf.keras.layers.Dense (units=1, activation='sigmoid', kernel_initializer = 'he_normal'))
+
+    optimize = tf.keras.optimizers.Adam(learning_rate=0.01)
+    ann.compile(optimizer=optimize, loss='binary_crossentropy', metrics=[tf.keras.metrics.Recall()])
+
+    ann.fit(x_train, y_train, batch_size=32, epochs=50)
+
+    Return_Recall(x_test, y_test)
+
+"""RECALL PARA CADA QUANTIDADE DE NEURÔNIOS NA CAMADA INTERMEDIÁRIA"""
+
+df_neurons = pd.DataFrame (list_ReturnRecall, index = list_neurons, columns = ['Recall']).sort_values('Recall',
+                                                                                                      ascending=False)
+df_neurons
+
+plt.plot(list_neurons, list_ReturnRecall, marker = 'o')
+plt.xlabel ('Número de neurônios na camada intermediária')
+plt.ylabel ('Recall da RNA')
+plt.show()
+
+"""TREINO DA RNA"""
+
+ann = Sequential()
+
+ann.add (tf.keras.layers.Dense (units=8, activation='relu', kernel_initializer = 'he_normal'))
+ann.add (tf.keras.layers.Dense (units=1, activation='sigmoid', kernel_initializer = 'he_normal'))
+
+optimize = tf.keras.optimizers.Adam(learning_rate=0.01)
+ann.compile(optimizer=optimize, loss='binary_crossentropy', metrics=[tf.keras.metrics.Recall()])
+
+ann.fit(x_train, y_train, batch_size=32, epochs=50)
+
+"""PREDIÇÃO DA RNA E RESULTADOS"""
+
+y_pred = ann.predict(x_test)
+y_pred = (y_pred > 0.5)
+
+pred_array = 1 * y_pred.reshape(len(y_pred), 1)
+test_array = y_test.values.reshape(len(y_test), 1)
+
+cm = confusion_matrix(test_array, pred_array)
+
+cm_display = ConfusionMatrixDisplay(confusion_matrix = cm, display_labels = ["Not churn", "Churn"])
+
+cm_display.plot()
+plt.show()
+
+print("Recall da validação (%): ", ((recall_score(y_test, y_pred)*100)))
+
+"""Utilizou-se o "Recall" como métrica de avaliação desta predição pelo fato deste indicador ter uma maior efetividade no estudo dos falsos negativos. A aparição de falsos negativos é bastante prejudicial nesta ocasião, dado que o erro na previsão da não saída de clientes pode ocasionar prejuízos financeiros significativos para a instituição. O valor de Recall obtido foi satisfatório. Para averiguar o impacto do tamanho do banco de dados no valor do Recall, será construída uma curva de aprendizagem a seguir.
+
+CURVA DE APRENDIZAGEM
+"""
+
+classif = MLPClassifier(hidden_layer_sizes=(8,), max_iter=5000, activation='relu', random_state=42,
+                        solver = 'adam', batch_size = 20,verbose=1)
+
+train_sizes_abs, train_scores, test_scores = learning_curve(classif, x, y, train_sizes=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                                                            scoring = 'recall_macro', cv=5)
+
+train_sizes_abs
+
+train_scores
+
+test_scores
+
+train_scores_mean = np.mean(train_scores, axis=1)
+train_scores_std = np.std(train_scores, axis=1)
+test_scores_mean = np.mean(test_scores, axis=1)
+test_scores_std = np.std(test_scores, axis=1)
+
+plt.figure()
+plt.title("Curva de Aprendizagem")
+plt.xlabel("Tamanho do Conjunto de Treinamento")
+plt.ylabel("Pontuação")
+plt.grid()
+
+plt.fill_between(train_sizes_abs, train_scores_mean - train_scores_std,
+                 train_scores_mean + train_scores_std, alpha=0.1, color="r")
+plt.fill_between(train_sizes_abs, test_scores_mean - test_scores_std,
+                 test_scores_mean + test_scores_std, alpha=0.1, color="g")
+plt.plot(train_sizes_abs, train_scores_mean, 'o-', color="r",
+         label="Pontuação de Treinamento")
+plt.plot(train_sizes_abs, test_scores_mean, 'o-', color="g",
+         label="Pontuação de Validação Cruzada")
+
+plt.legend(loc="best")
+plt.show()
+
+"""Nota-se que, a partir de 1500 dados de treinamento, o modelo preditivo já apresenta uma estabilidade de pontuação, o que demonstra que possívelmente o aumento do banco de dados não traria uma alteração significativa neste indicador."""
